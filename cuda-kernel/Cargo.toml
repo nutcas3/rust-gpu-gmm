@@ -1,0 +1,25 @@
+[package]
+name = "cuda-kernel"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Device-side CUDA standard library
+cuda-std = "0.3"
+
+[build-dependencies]
+# For compiling Rust to PTX
+cc = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+# Disable panic unwinding for device code
+panic = "abort"
+
+[profile.dev]
+opt-level = 2
+panic = "abort"
