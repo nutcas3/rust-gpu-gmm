@@ -1,0 +1,39 @@
+[workspace]
+members = [
+    "cuda-kernel",
+    "utils",
+]
+resolver = "2"
+
+[package]
+name = "rust-gpu-gemm"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "High-performance GEMM microkernel optimizer for NVIDIA Hopper/Blackwell GPUs"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# CUDA Driver API wrapper for host-side operations
+cust = "0.3"
+# Error handling
+anyhow = "1.0"
+# Utilities from our workspace
+utils = { path = "utils" }
+
+[dev-dependencies]
+# For testing and benchmarking
+criterion = "0.5"
+
+[[bin]]
+name = "gemm-optimizer"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+[profile.dev]
+opt-level = 0
+debug = true
