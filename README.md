@@ -1,4 +1,4 @@
-# Rust GEMM Microkernel Optimizer 🦀⚡
+# Rust GEMM Microkernel Optimizer 🦀
 
 A high-performance Matrix Multiplication (GEMM) microkernel implementation in Rust, targeting NVIDIA Tensor Cores on Hopper and Blackwell architectures.
 
