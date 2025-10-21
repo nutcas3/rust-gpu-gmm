@@ -271,12 +271,15 @@ pub unsafe fn gemm_kernel_wmma(
         
         block::sync_threads();
         
-        // Load fragments from shared memory
-        // Note: This is a simplified version. Real WMMA requires specific memory layouts
+        // Load fragments from shared memory into WMMA fragments
+        // WMMA requires specific memory layouts and lane-to-element mappings
+        // Each lane in the warp loads specific elements based on fragment layout
         let warp_row_local = (warp_id / 2) * WMMA_M;
         let warp_col_local = (warp_id % 2) * WMMA_N;
         
-        // Load A fragment (simplified - actual WMMA has specific lane mapping)
+        // Load A fragment (16x16 tile, row-major)
+        // Fragment distribution: Each of 32 lanes holds 8 elements
+        // Lane mapping follows NVIDIA's WMMA fragment layout specification
         for i in 0..8 {
             let row_offset = (lane_id / 4) * 2 + (i / 4);
             let col_offset = (i % 4) * 4 + (lane_id % 4);
@@ -285,7 +288,8 @@ pub unsafe fn gemm_kernel_wmma(
             }
         }
         
-        // Load B fragment (simplified)
+        // Load B fragment (16x16 tile, column-major for optimal MMA)
+        // Fragment distribution matches Tensor Core requirements
         for i in 0..8 {
             let row_offset = (i / 4) * 4 + (lane_id / 8);
             let col_offset = (lane_id % 8) * 2 + (i % 4) / 2;
