@@ -1,9 +1,3 @@
-//! Tensor layout and shape definitions
-//! 
-//! This module implements hierarchical memory layout abstractions that mirror
-//! the concepts from NVIDIA's CuTe library, enabling software-hardware co-design
-//! for optimal GEMM performance.
-
 use core::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
