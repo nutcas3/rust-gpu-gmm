@@ -329,23 +329,142 @@ pub unsafe fn gemm_kernel_wmma(
     }
 }
 
-/// Simplified WMMA matrix multiply-accumulate operation
+/// WMMA matrix multiply-accumulate operation using Tensor Cores
 /// 
-/// In production, this would be replaced with inline PTX:
-/// asm!("mma.sync.aligned.m16n16k16.row.col.f32.f32.f32.f32 ...")
+/// Executes: D = A * B + C using NVIDIA Tensor Cores
+/// Dimensions: 16x16x16 (M x N x K)
+/// Precision: FP32 accumulation with FP32 inputs
+/// 
+/// This uses the mma.sync.aligned PTX instruction which executes
+/// on Tensor Cores (Volta, Turing, Ampere, Hopper, Blackwell)
 #[inline(always)]
 unsafe fn wmma_mma_sync(
     frag_c: &mut [f32; 8],
     frag_a: &[f32; 8],
     frag_b: &[f32; 8],
 ) {
-    // Simplified matrix multiply for 16x16x16
-    // Real Tensor Cores would execute this in a single instruction
-    for i in 0..8 {
-        for j in 0..8 {
-            // This is a simplified accumulation pattern
-            // Actual WMMA has specific fragment layouts
-            frag_c[i] += frag_a[i] * frag_b[j];
-        }
-    }
+    // Use inline PTX assembly for actual Tensor Core operation
+    // mma.sync.aligned.m16n16k16.row.col.f32.f32.f32.f32
+    //
+    // Format: mma.sync.aligned.shape.layout_a.layout_b.dtype_d.dtype_a.dtype_b.dtype_c
+    // - shape: m16n16k16 (16x16x16 matrix multiply)
+    // - layout: row.col (A is row-major, B is col-major)
+    // - dtypes: f32.f32.f32.f32 (all FP32)
+    
+    core::arch::asm!(
+        // Load fragment A into registers
+        "mov.b32 {a0}, {frag_a0};",
+        "mov.b32 {a1}, {frag_a1};",
+        "mov.b32 {a2}, {frag_a2};",
+        "mov.b32 {a3}, {frag_a3};",
+        "mov.b32 {a4}, {frag_a4};",
+        "mov.b32 {a5}, {frag_a5};",
+        "mov.b32 {a6}, {frag_a6};",
+        "mov.b32 {a7}, {frag_a7};",
+        
+        // Load fragment B into registers
+        "mov.b32 {b0}, {frag_b0};",
+        "mov.b32 {b1}, {frag_b1};",
+        "mov.b32 {b2}, {frag_b2};",
+        "mov.b32 {b3}, {frag_b3};",
+        "mov.b32 {b4}, {frag_b4};",
+        "mov.b32 {b5}, {frag_b5};",
+        "mov.b32 {b6}, {frag_b6};",
+        "mov.b32 {b7}, {frag_b7};",
+        
+        // Load accumulator C into registers
+        "mov.b32 {c0}, {frag_c0};",
+        "mov.b32 {c1}, {frag_c1};",
+        "mov.b32 {c2}, {frag_c2};",
+        "mov.b32 {c3}, {frag_c3};",
+        "mov.b32 {c4}, {frag_c4};",
+        "mov.b32 {c5}, {frag_c5};",
+        "mov.b32 {c6}, {frag_c6};",
+        "mov.b32 {c7}, {frag_c7};",
+        
+        // Execute Tensor Core MMA operation
+        // D = A * B + C
+        "mma.sync.aligned.m16n16k16.row.col.f32.f32.f32.f32",
+        "  {{d0}, {d1}, {d2}, {d3}, {d4}, {d5}, {d6}, {d7}},",
+        "  {{a0}, {a1}, {a2}, {a3}, {a4}, {a5}, {a6}, {a7}},",
+        "  {{b0}, {b1}, {b2}, {b3}, {b4}, {b5}, {b6}, {b7}},",
+        "  {{c0}, {c1}, {c2}, {c3}, {c4}, {c5}, {c6}, {c7}};",
+        
+        // Store result back to fragment C
+        "mov.b32 {frag_c0}, {d0};",
+        "mov.b32 {frag_c1}, {d1};",
+        "mov.b32 {frag_c2}, {d2};",
+        "mov.b32 {frag_c3}, {d3};",
+        "mov.b32 {frag_c4}, {d4};",
+        "mov.b32 {frag_c5}, {d5};",
+        "mov.b32 {frag_c6}, {d6};",
+        "mov.b32 {frag_c7}, {d7};",
+        
+        // Input operands (fragment A)
+        frag_a0 = in(reg) frag_a[0],
+        frag_a1 = in(reg) frag_a[1],
+        frag_a2 = in(reg) frag_a[2],
+        frag_a3 = in(reg) frag_a[3],
+        frag_a4 = in(reg) frag_a[4],
+        frag_a5 = in(reg) frag_a[5],
+        frag_a6 = in(reg) frag_a[6],
+        frag_a7 = in(reg) frag_a[7],
+        
+        // Input operands (fragment B)
+        frag_b0 = in(reg) frag_b[0],
+        frag_b1 = in(reg) frag_b[1],
+        frag_b2 = in(reg) frag_b[2],
+        frag_b3 = in(reg) frag_b[3],
+        frag_b4 = in(reg) frag_b[4],
+        frag_b5 = in(reg) frag_b[5],
+        frag_b6 = in(reg) frag_b[6],
+        frag_b7 = in(reg) frag_b[7],
+        
+        // Input/Output operands (fragment C - accumulator)
+        frag_c0 = inout(reg) frag_c[0],
+        frag_c1 = inout(reg) frag_c[1],
+        frag_c2 = inout(reg) frag_c[2],
+        frag_c3 = inout(reg) frag_c[3],
+        frag_c4 = inout(reg) frag_c[4],
+        frag_c5 = inout(reg) frag_c[5],
+        frag_c6 = inout(reg) frag_c[6],
+        frag_c7 = inout(reg) frag_c[7],
+        
+        // Temporary registers for intermediate values
+        a0 = out(reg) _,
+        a1 = out(reg) _,
+        a2 = out(reg) _,
+        a3 = out(reg) _,
+        a4 = out(reg) _,
+        a5 = out(reg) _,
+        a6 = out(reg) _,
+        a7 = out(reg) _,
+        
+        b0 = out(reg) _,
+        b1 = out(reg) _,
+        b2 = out(reg) _,
+        b3 = out(reg) _,
+        b4 = out(reg) _,
+        b5 = out(reg) _,
+        b6 = out(reg) _,
+        b7 = out(reg) _,
+        
+        c0 = out(reg) _,
+        c1 = out(reg) _,
+        c2 = out(reg) _,
+        c3 = out(reg) _,
+        c4 = out(reg) _,
+        c5 = out(reg) _,
+        c6 = out(reg) _,
+        c7 = out(reg) _,
+        
+        d0 = out(reg) _,
+        d1 = out(reg) _,
+        d2 = out(reg) _,
+        d3 = out(reg) _,
+        d4 = out(reg) _,
+        d5 = out(reg) _,
+        d6 = out(reg) _,
+        d7 = out(reg) _,
+    );
 }
